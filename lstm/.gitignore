@@ -2,6 +2,14 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pt 
+*.pth
+*.pkl
+*.pth.tar
+*.pth.tar.gz
+*.pth.tar.bz2
+*.pth.tar.xz
+*.pth.tar.lzma
 
 # C extensions
 *.so
