@@ -89,10 +89,10 @@ def evaluate_bleu(model, iterator, src_vocab, tgt_vocab, device):
                 
                 # Add to lists
                 hypotheses.append(pred_text)
-                references.append([tgt_text])  # sacrebleu expects a list of references for each hypothesis
+                references.append(tgt_text)
     
     # Calculate BLEU score
-    bleu = sacrebleu.corpus_bleu(hypotheses, references)
+    bleu = sacrebleu.corpus_bleu(hypotheses, [references])
     
     return bleu.score
 
