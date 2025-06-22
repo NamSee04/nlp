@@ -7,7 +7,7 @@ This project implements RNN-based machine translation for Vietnamese to English 
 - `preprocess.py`: Dataset loading and preprocessing
 - `model.py`: RNN model implementation
 - `train.py`: Training script
-- `evaluate.py`: Evaluation script with BLEU metric
+- `evaluate.py`: Evaluation script with BLEU and BERTScore metrics
 - `translate.py`: Inference script for translation
 - `run.sh`: Main bash script to run the project end-to-end
 - `kaggle_rnn_training.ipynb`: Kaggle notebook for training the model
