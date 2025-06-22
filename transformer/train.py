@@ -161,7 +161,7 @@ def main(args):
         # Save model if it has the best validation loss so far
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
-            model_path = os.path.join(args.model_dir, f"{args.direction}-lstm.pt")
+            model_path = os.path.join(args.model_dir, f"{args.direction}-transformer.pt")
             torch.save({
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
@@ -193,7 +193,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a sequence-to-sequence LSTM model for translation")
+    parser = argparse.ArgumentParser(description="Train a sequence-to-sequence Transformer model for translation")
     parser.add_argument("--direction", type=str, default="en-vi", choices=["en-vi", "vi-en"], 
                         help="Translation direction")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
