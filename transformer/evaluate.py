@@ -24,7 +24,7 @@ def indices_to_text(indices, vocab_dict, ignore_special=True):
     return ' '.join(words)
 
 def translate_sentence(sentence, src_vocab, tgt_vocab, model, device, max_length=100):
-    """Translate a single sentence"""
+    """Translate a single sentence using transformer model"""
     model.eval()
     
     # Preprocess sentence
@@ -39,22 +39,30 @@ def translate_sentence(sentence, src_vocab, tgt_vocab, model, device, max_length
     # Convert to tensor
     src_tensor = torch.LongTensor(indices).unsqueeze(0).to(device)
     
-    # Get encoder outputs
+    # Create source mask
+    src_mask = torch.ones(1, 1, 1, len(indices)).to(device)
+    
+    # Get encoder output
     with torch.no_grad():
-        encoder_outputs, hidden, cell = model.encoder(src_tensor)
+        encoder_output = model.encode(src_tensor, src_mask)
     
     # Start with BOS token
     tgt_indices = [tgt_vocab['<BOS>']]
     
     # Generate translation
     for i in range(max_length):
-        tgt_tensor = torch.LongTensor([tgt_indices[-1]]).unsqueeze(0).to(device)
+        tgt_tensor = torch.LongTensor([tgt_indices]).to(device)
+        
+        # Create target mask (causal mask)
+        tgt_seq_len = tgt_tensor.shape[1]
+        tgt_mask = torch.tril(torch.ones(1, 1, tgt_seq_len, tgt_seq_len)).to(device)
         
         with torch.no_grad():
-            output, hidden, cell = model.decoder(tgt_tensor, hidden, cell)
+            decoder_output = model.decode(encoder_output, src_mask, tgt_tensor, tgt_mask)
+            output = model.project(decoder_output)
             
-        # Get predicted token
-        pred_token = output.argmax(1).item()
+        # Get predicted token (last position)
+        pred_token = output[0, -1].argmax().item()
         tgt_indices.append(pred_token)
         
         # Stop if EOS token is predicted
@@ -127,26 +135,29 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
     print(f"Using device: {device}")
     
-    # Load data
-    print(f"Loading {args.direction} translation data...")
-    _, _, test_loader, src_vocab, tgt_vocab = load_translation_data(
-        direction=args.direction,
-        batch_size=args.batch_size,
-        max_length=args.max_length
-    )
-    
-    # Load model
+    # Load model checkpoint first to get the saved vocabularies
     checkpoint = torch.load(args.model_path, map_location=device)
+    src_vocab = checkpoint['src_vocab']
+    tgt_vocab = checkpoint['tgt_vocab']
     model_args = checkpoint['args']
     
-    # Create model with the same architecture
+    print(f"Loaded vocabularies from checkpoint:")
+    print(f"Source vocabulary size: {len(src_vocab)}")
+    print(f"Target vocabulary size: {len(tgt_vocab)}")
+    
+    # Load data with the same parameters used during training
+    print(f"Loading {args.direction} translation data...")
+    _, _, test_loader, _, _ = load_translation_data(
+        direction=args.direction,
+        vocab_min_freq=model_args.get('min_freq', 2),
+        batch_size=args.batch_size,
+        max_length=model_args.get('max_length', 100)
+    )
+    
+    # Create model with the same architecture and vocabulary sizes from checkpoint
     model = create_model(
         src_vocab_size=len(src_vocab),
         tgt_vocab_size=len(tgt_vocab),
-        embedding_dim=model_args['emb_dim'],
-        hidden_dim=model_args['hidden_dim'],
-        num_layers=model_args['num_layers'],
-        dropout=model_args['dropout'],
         device=device
     )
     
