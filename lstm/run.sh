@@ -19,8 +19,8 @@ HIDDEN_DIM=512
 NUM_LAYERS=2
 DROPOUT=0.3
 BATCH_SIZE=64
-EPOCHS=10
-LEARNING_RATE=0.001
+EPOCHS=20
+LEARNING_RATE=0.00005
 
 # Check if CUDA is available
 if command -v nvidia-smi &> /dev/null; then
