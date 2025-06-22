@@ -5,7 +5,7 @@ from tqdm import tqdm
 import sacrebleu
 from dataloader import load_translation_data
 from model import create_model
-from utils import preprocess_text
+from utils import preprocess_text, detokenize_text
 
 def indices_to_text(indices, vocab_dict, ignore_special=True):
     """Convert indices to text"""
@@ -87,12 +87,12 @@ def evaluate_bleu(model, iterator, src_vocab, tgt_vocab, device):
                 # Translate source sentence
                 pred_text = translate_sentence(src_text.split(), src_vocab, tgt_vocab, model, device)
                 
-                # Add to lists
-                hypotheses.append(pred_text)
-                references.append(tgt_text)
+                # Detokenize for BLEU calculation
+                hypotheses.append(detokenize_text(pred_text))
+                references.append(detokenize_text(tgt_text))
     
     # Calculate BLEU score
-    bleu = sacrebleu.corpus_bleu(hypotheses, [references])
+    bleu = sacrebleu.corpus_bleu(hypotheses, [references], force=True)
     
     return bleu.score
 

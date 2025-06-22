@@ -15,6 +15,11 @@ def preprocess_text(text, language):
     
     return text.strip()
 
+def detokenize_text(text):
+    """Basic detokenization to remove spaces around punctuation."""
+    text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+    return text
+
 def build_vocabulary(text_data, min_freq=2):
     """Build vocabulary from text data"""
     all_words = []
