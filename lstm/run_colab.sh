@@ -62,14 +62,14 @@ python train.py \
     --n_epochs $EPOCHS \
     --learning_rate $LEARNING_RATE
 
-# Evaluate models
-echo "Evaluating English to Vietnamese model..."
+# Evaluate models with BLEU and BERTScore
+echo "Evaluating English to Vietnamese model with BLEU and BERTScore..."
 python evaluate.py \
     --direction en-vi \
     --model_path models/en-vi-lstm.pt \
     --examples 3
 
-echo "Evaluating Vietnamese to English model..."
+echo "Evaluating Vietnamese to English model with BLEU and BERTScore..."
 python evaluate.py \
     --direction vi-en \
     --model_path models/vi-en-lstm.pt \
