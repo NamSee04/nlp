@@ -3,6 +3,8 @@ import argparse
 import os
 from tqdm import tqdm
 import sacrebleu
+import numpy as np
+from bert_score import score as bert_score
 from dataloader import load_translation_data
 from model import create_model
 from utils import preprocess_text, detokenize_text
@@ -94,7 +96,31 @@ def evaluate_bleu(model, iterator, src_vocab, tgt_vocab, device):
     # Calculate BLEU score
     bleu = sacrebleu.corpus_bleu(hypotheses, [references], force=True)
     
-    return bleu.score
+    return bleu.score, hypotheses, references
+
+def evaluate_bertscore(hypotheses, references, lang):
+    """Evaluate the model using the BERTScore metric"""
+    # Determine the model based on language
+    if lang == 'en':
+        model_type = 'microsoft/deberta-xlarge-mnli'  # Good model for English
+    else:  # 'vi' or others
+        model_type = 'xlm-roberta-large'  # Multilingual model that supports Vietnamese
+    
+    # Calculate BERTScore
+    P, R, F1 = bert_score(
+        cands=hypotheses,
+        refs=references,
+        lang=lang,
+        model_type=model_type,
+        verbose=True
+    )
+    
+    # Return precision, recall, and F1 as the harmonic mean
+    return {
+        'precision': P.mean().item(),
+        'recall': R.mean().item(),
+        'f1': F1.mean().item()
+    }
 
 def main(args):
     # Setup device
@@ -129,8 +155,17 @@ def main(args):
     print(f"Model loaded from {args.model_path}")
     
     # Calculate BLEU score
-    bleu_score = evaluate_bleu(model, test_loader, src_vocab, tgt_vocab, device)
+    bleu_score, hypotheses, references = evaluate_bleu(model, test_loader, src_vocab, tgt_vocab, device)
     print(f"BLEU score: {bleu_score:.2f}")
+    
+    # Calculate BERTScore
+    # Determine target language from direction
+    tgt_lang = args.direction.split('-')[1]
+    bertscore_results = evaluate_bertscore(hypotheses, references, 'en' if tgt_lang == 'en' else 'vi')
+    print(f"BERTScore:")
+    print(f"  Precision: {bertscore_results['precision']:.4f}")
+    print(f"  Recall: {bertscore_results['recall']:.4f}")
+    print(f"  F1: {bertscore_results['f1']:.4f}")
     
     # Print some example translations
     if args.examples > 0:
