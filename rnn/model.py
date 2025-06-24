@@ -57,7 +57,7 @@ class Seq2Seq(nn.Module):
         self.decoder = decoder
         self.device = device
         
-    def forward(self, src, tgt, teacher_forcing_ratio=0.5):
+    def forward(self, src, tgt, teacher_forcing_ratio=0.7):
         # src: [batch_size, src_len]
         # tgt: [batch_size, tgt_len]
         

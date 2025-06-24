@@ -52,13 +52,30 @@ def translate_sentence(sentence, src_vocab, tgt_vocab, model, device, max_length
         
         with torch.no_grad():
             output, hidden = model.decoder(tgt_tensor, hidden)
-            
-        # Get predicted token
-        pred_token = output.argmax(1).item()
+        
+        # Apply temperature to output distribution
+        temperature = 0.8
+        output = output / temperature
+        
+        # Use softmax to get probability distribution
+        probs = torch.nn.functional.softmax(output, dim=1)
+        
+        # Use sampling instead of argmax for more diverse outputs
+        pred_token = torch.multinomial(probs, 1)[0].item()
+        
+        # Skip EOS token in the first few positions to prevent very short outputs
+        if i < 3 and pred_token == tgt_vocab['<EOS>']:
+            # Get second best prediction instead
+            top_tokens = torch.topk(probs, 3)[1][0]
+            for token in top_tokens:
+                if token.item() != tgt_vocab['<EOS>']:
+                    pred_token = token.item()
+                    break
+        
         tgt_indices.append(pred_token)
         
-        # Stop if EOS token is predicted
-        if pred_token == tgt_vocab['<EOS>']:
+        # Stop if EOS token is predicted (after allowing some minimum length)
+        if pred_token == tgt_vocab['<EOS>'] and len(tgt_indices) > 3:
             break
     
     # Convert indices to text

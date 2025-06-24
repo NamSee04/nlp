@@ -126,6 +126,11 @@ def main(args):
     pad_idx = src_vocab['<PAD>']
     criterion = nn.CrossEntropyLoss(ignore_index=pad_idx)
     
+    # Add learning rate scheduler - reduce LR when validation loss plateaus
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=1, verbose=True
+    )
+    
     # Training loop
     best_valid_loss = float('inf')
     train_losses = []
@@ -137,6 +142,9 @@ def main(args):
         # Train and evaluate
         train_loss = train(model, train_loader, optimizer, criterion, args.clip, device)
         valid_loss = evaluate(model, val_loader, criterion, device)
+        
+        # Step the scheduler based on validation loss
+        scheduler.step(valid_loss)
         
         # Save losses
         train_losses.append(train_loss)
@@ -183,10 +191,10 @@ if __name__ == "__main__":
     parser.add_argument("--emb_dim", type=int, default=256, help="Embedding dimension")
     parser.add_argument("--hidden_dim", type=int, default=512, help="Hidden dimension")
     parser.add_argument("--num_layers", type=int, default=2, help="Number of RNN layers")
-    parser.add_argument("--dropout", type=float, default=0.3, help="Dropout rate")
-    parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
+    parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")  # Increased from 0.3
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")  # Decreased from 64
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of epochs")
-    parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--learning_rate", type=float, default=0.0005, help="Learning rate")  # Decreased from 0.001
     parser.add_argument("--clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--min_freq", type=int, default=2, 
                         help="Minimum frequency for words to be included in vocabulary")
