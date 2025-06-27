@@ -4,12 +4,13 @@ This project implements LSTM-based machine translation for Vietnamese to English
 
 ## Project Structure
 - `requirements.txt`: Required Python packages
-- `preprocess.py`: Dataset loading and preprocessing
+- `preprocess.py`: Dataset loading and preprocessing with enhanced techniques
 - `model.py`: LSTM model implementation
 - `train.py`: Training script
-- `evaluate.py`: Evaluation script with BLEU metric
+- `evaluate.py`: Evaluation script with BLEU and BERTScore metrics
 - `translate.py`: Inference script for translation
 - `run.sh`: Main bash script to run the project end-to-end
+- `test.sh`: Script for interactive translation testing
 
 ## Installation
 
@@ -24,20 +25,41 @@ pip install -r requirements.txt
 bash run.sh
 ```
 
-### Training
+### Training with Enhanced Preprocessing
 ```bash
-python train.py --direction en-vi  # English to Vietnamese
-python train.py --direction vi-en  # Vietnamese to English
+# Word-level tokenization
+python train.py --direction en-vi
+
+# Subword tokenization
+python train.py --direction en-vi --use_subword --subword_vocab_size 8000
+
+# With length filtering
+python train.py --direction en-vi --max_len 50 --max_ratio 2.0
 ```
 
 ### Evaluation
 ```bash
-python evaluate.py --direction en-vi --model-path models/en-vi-lstm.pt
-python evaluate.py --direction vi-en --model-path models/vi-en-lstm.pt
+# For word-level models
+python evaluate.py --direction en-vi --model-path models/en-vi-lstm-word.pt
+
+# For subword models
+python evaluate.py --direction vi-en --model-path models/vi-en-lstm-subword.pt
 ```
 
 ### Translation (Inference)
 ```bash
-python translate.py --direction en-vi --text "Hello, how are you?"
-python translate.py --direction vi-en --text "Xin chào, bạn khỏe không?"
+# Interactive mode
+python translate.py --direction en-vi --model-path models/en-vi-lstm-word.pt
+
+# Single text translation
+python translate.py --direction vi-en --model-path models/vi-en-lstm-subword.pt --text "Xin chào, bạn khỏe không?"
+```
+
+### Quick Testing
+```bash
+# Default: en-vi direction with word-level tokenization
+./test.sh
+
+# Specify direction and tokenization type
+./test.sh vi-en subword
 ``` 

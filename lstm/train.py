@@ -104,7 +104,11 @@ def main(args):
         direction=args.direction,
         vocab_min_freq=args.min_freq,
         batch_size=args.batch_size,
-        max_length=args.max_length
+        max_length=args.max_length,
+        use_subword=args.use_subword,
+        max_len=args.max_len,
+        max_ratio=args.max_ratio,
+        subword_vocab_size=args.subword_vocab_size
     )
     
     # Create model
@@ -145,7 +149,9 @@ def main(args):
         # Save model if it has the best validation loss so far
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
-            model_path = os.path.join(args.model_dir, f"{args.direction}-lstm.pt")
+            # Include tokenization type in the model name
+            tokenization_type = "subword" if args.use_subword else "word"
+            model_path = os.path.join(args.model_dir, f"{args.direction}-lstm-{tokenization_type}.pt")
             torch.save({
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
@@ -165,11 +171,12 @@ def main(args):
     plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label='Training Loss')
     plt.plot(valid_losses, label='Validation Loss')
-    plt.title(f"{args.direction} Translation - Training Curve")
+    tokenization_type = "subword" if args.use_subword else "word"
+    plt.title(f"{args.direction} Translation ({tokenization_type}) - Training Curve")
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig(f"plots/{args.direction}_training_curve.png")
+    plt.savefig(f"plots/{args.direction}_{tokenization_type}_training_curve.png")
     
     # Evaluate on test set
     test_loss = evaluate(model, test_loader, criterion, device)
@@ -190,8 +197,16 @@ if __name__ == "__main__":
     parser.add_argument("--clip", type=float, default=1.0, help="Gradient clipping value")
     parser.add_argument("--min_freq", type=int, default=2, 
                         help="Minimum frequency for words to be included in vocabulary")
-    parser.add_argument("--max_length", type=int, default=100, help="Maximum sequence length")
+    parser.add_argument("--max_length", type=int, default=100, help="Maximum sequence length for model")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
+    # New preprocessing arguments
+    parser.add_argument("--use_subword", action="store_true", help="Use subword tokenization")
+    parser.add_argument("--max_len", type=int, default=50, 
+                        help="Maximum sequence length to keep during preprocessing")
+    parser.add_argument("--max_ratio", type=float, default=2.0, 
+                        help="Maximum source/target length ratio to keep")
+    parser.add_argument("--subword_vocab_size", type=int, default=8000, 
+                        help="Vocabulary size for subword tokenization")
     
     args = parser.parse_args()
     main(args) 

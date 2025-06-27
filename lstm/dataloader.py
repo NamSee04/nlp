@@ -4,27 +4,32 @@ from datasets import load_dataset
 import pickle
 import os
 from tqdm import tqdm
-from utils import preprocess_text, build_vocabulary
+from utils import preprocess_text
+from preprocess import enhanced_preprocess_text, filter_by_length, filter_by_ratio
 
 class TranslationDataset(Dataset):
-    def __init__(self, data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length=100):
+    def __init__(self, data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length=100, 
+                 src_tokenizer=None, tgt_tokenizer=None, use_subword=False):
         self.data = data
         self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
         self.max_length = max_length
+        self.src_tokenizer = src_tokenizer
+        self.tgt_tokenizer = tgt_tokenizer
+        self.use_subword = use_subword
         
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, index):
-        src_text = preprocess_text(self.data[index][self.src_lang], self.src_lang)
-        tgt_text = preprocess_text(self.data[index][self.tgt_lang], self.tgt_lang)
+        src_text = enhanced_preprocess_text(self.data[index][self.src_lang], self.src_lang)
+        tgt_text = enhanced_preprocess_text(self.data[index][self.tgt_lang], self.tgt_lang)
         
         # Convert tokens to indices
-        src_indices = self.text_to_indices(src_text, self.src_vocab)
-        tgt_indices = self.text_to_indices(tgt_text, self.tgt_vocab, add_bos_eos=True)
+        src_indices = self.text_to_indices(src_text, self.src_vocab, self.src_tokenizer)
+        tgt_indices = self.text_to_indices(tgt_text, self.tgt_vocab, self.tgt_tokenizer, add_bos_eos=True)
         
         return {
             'src_text': src_text,
@@ -33,22 +38,34 @@ class TranslationDataset(Dataset):
             'tgt_indices': torch.tensor(tgt_indices)
         }
     
-    def text_to_indices(self, text, vocab, add_bos_eos=False):
-        tokens = text.split()
-        indices = []
+    def text_to_indices(self, text, vocab, tokenizer=None, add_bos_eos=False):
+        if self.use_subword and tokenizer is not None:
+            # Use subword tokenization
+            encoding = tokenizer.encode(text)
+            tokens = encoding.ids
+        else:
+            # Use word-level tokenization
+            tokens = text.split()
+            tokens = [vocab.get(token, vocab['<UNK>']) for token in tokens]
         
+        # Truncate if needed
+        max_tokens = self.max_length - (2 if add_bos_eos else 0)
+        tokens = tokens[:max_tokens]
+        
+        # Add BOS/EOS tokens if needed
+        indices = []
         if add_bos_eos:
             indices.append(vocab['<BOS>'])
         
-        for token in tokens[:self.max_length - (2 if add_bos_eos else 0)]:
-            indices.append(vocab.get(token, vocab['<UNK>']))
+        indices.extend(tokens)
         
         if add_bos_eos:
             indices.append(vocab['<EOS>'])
             
         return indices
 
-def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, max_length=100):
+def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, max_length=100,
+                          use_subword=True, max_len=50, max_ratio=2.0, subword_vocab_size=8000):
     """
     Load and prepare the vi_en-translation dataset
     
@@ -57,6 +74,10 @@ def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, ma
         vocab_min_freq: minimum frequency for words to be included in vocabulary
         batch_size: batch size for DataLoader
         max_length: maximum sequence length
+        use_subword: whether to use subword tokenization
+        max_len: maximum sequence length to keep during preprocessing
+        max_ratio: maximum source/target length ratio to keep
+        subword_vocab_size: vocabulary size for subword tokenization
         
     Returns:
         train_loader, val_loader, test_loader, src_vocab, tgt_vocab
@@ -69,46 +90,33 @@ def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, ma
     else:
         raise ValueError("direction must be either 'en-vi' or 'vi-en'")
     
-    # Cache directory for vocabularies
-    os.makedirs('cache', exist_ok=True)
-    vocab_cache_file = f'cache/{src_lang}_{tgt_lang}_vocab.pkl'
+    # Import preprocess function
+    from preprocess import preprocess_dataset
     
-    # Load dataset with parameters to work around caching issues
-    dataset = load_dataset('harouzie/vi_en-translation', download_mode='force_redownload')
-    
-    # Create train/val/test split if not already done
-    if 'validation' not in dataset or 'test' not in dataset:
-        splits = dataset['train'].train_test_split(test_size=0.2)
-        train_data = splits['train']
-        temp_splits = splits['test'].train_test_split(test_size=0.5)
-        val_data = temp_splits['train']
-        test_data = temp_splits['test']
-    else:
-        train_data = dataset['train']
-        val_data = dataset['validation']
-        test_data = dataset['test']
-    
-    # Build or load vocabularies
-    if os.path.exists(vocab_cache_file):
-        with open(vocab_cache_file, 'rb') as f:
-            src_vocab, tgt_vocab = pickle.load(f)
-    else:
-        # Extract source and target texts
-        src_texts = [preprocess_text(item[src_lang], src_lang) for item in tqdm(train_data)]
-        tgt_texts = [preprocess_text(item[tgt_lang], tgt_lang) for item in tqdm(train_data)]
-        
-        # Build vocabularies
-        src_vocab = build_vocabulary(src_texts, min_freq=vocab_min_freq)
-        tgt_vocab = build_vocabulary(tgt_texts, min_freq=vocab_min_freq)
-        
-        # Save vocabularies
-        with open(vocab_cache_file, 'wb') as f:
-            pickle.dump((src_vocab, tgt_vocab), f)
+    # Preprocess dataset
+    train_data, val_data, test_data, src_vocab, tgt_vocab, src_tokenizer, tgt_tokenizer = preprocess_dataset(
+        direction=direction,
+        min_freq=vocab_min_freq,
+        cache_dir='cache',
+        use_subword=use_subword,
+        max_len=max_len,
+        max_ratio=max_ratio,
+        subword_vocab_size=subword_vocab_size
+    )
     
     # Create datasets
-    train_dataset = TranslationDataset(train_data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length)
-    val_dataset = TranslationDataset(val_data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length)
-    test_dataset = TranslationDataset(test_data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length)
+    train_dataset = TranslationDataset(
+        train_data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length,
+        src_tokenizer, tgt_tokenizer, use_subword
+    )
+    val_dataset = TranslationDataset(
+        val_data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length,
+        src_tokenizer, tgt_tokenizer, use_subword
+    )
+    test_dataset = TranslationDataset(
+        test_data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length,
+        src_tokenizer, tgt_tokenizer, use_subword
+    )
     
     # Create collate function
     def collate_fn(batch):

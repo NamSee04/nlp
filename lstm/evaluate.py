@@ -8,6 +8,7 @@ from bert_score import score as bert_score
 from dataloader import load_translation_data
 from model import create_model
 from utils import preprocess_text, detokenize_text
+from preprocess import enhanced_preprocess_text
 
 def indices_to_text(indices, vocab_dict, ignore_special=True):
     """Convert indices to text"""
@@ -23,18 +24,30 @@ def indices_to_text(indices, vocab_dict, ignore_special=True):
     
     return ' '.join(words)
 
-def translate_sentence(sentence, src_vocab, tgt_vocab, model, device, max_length=100):
+def translate_sentence(sentence, src_vocab, tgt_vocab, model, device, max_length=100, 
+                       src_tokenizer=None, use_subword=False):
     """Translate a single sentence"""
     model.eval()
     
     # Preprocess sentence
     if isinstance(sentence, str):
-        tokens = preprocess_text(sentence, 'en' if 'en' in src_vocab else 'vi').split()
+        if use_subword and src_tokenizer:
+            # Use subword tokenization
+            encoding = src_tokenizer.encode(sentence)
+            indices = encoding.ids
+        else:
+            # Use word-level tokenization
+            tokens = sentence.split()
+            indices = [src_vocab.get(token, src_vocab['<UNK>']) for token in tokens]
     else:
-        tokens = sentence
-    
-    # Convert tokens to indices
-    indices = [src_vocab.get(token, src_vocab['<UNK>']) for token in tokens]
+        if use_subword and src_tokenizer:
+            # Use subword tokenization
+            encoding = src_tokenizer.encode(' '.join(sentence))
+            indices = encoding.ids
+        else:
+            # Use word-level tokenization
+            tokens = sentence
+            indices = [src_vocab.get(token, src_vocab['<UNK>']) for token in tokens]
     
     # Convert to tensor
     src_tensor = torch.LongTensor(indices).unsqueeze(0).to(device)
@@ -67,9 +80,14 @@ def translate_sentence(sentence, src_vocab, tgt_vocab, model, device, max_length
     # Filter out special tokens
     tgt_tokens = [token for token in tgt_tokens if token not in ['<PAD>', '<BOS>', '<EOS>']]
     
-    return ' '.join(tgt_tokens)
+    # If using subword tokenization, need to decode the tokens
+    if use_subword:
+        # Simple concatenation (this is a simplification; ideally we would use the tokenizer's decode method)
+        return ''.join(tgt_tokens).replace('▁', ' ').strip()
+    else:
+        return ' '.join(tgt_tokens)
 
-def evaluate_bleu(model, iterator, src_vocab, tgt_vocab, device):
+def evaluate_bleu(model, iterator, src_vocab, tgt_vocab, device, src_tokenizer=None, use_subword=False):
     """Evaluate the model using the BLEU metric"""
     model.eval()
     references = []
@@ -87,7 +105,15 @@ def evaluate_bleu(model, iterator, src_vocab, tgt_vocab, device):
                 tgt_text = tgt_texts[i]
                 
                 # Translate source sentence
-                pred_text = translate_sentence(src_text.split(), src_vocab, tgt_vocab, model, device)
+                pred_text = translate_sentence(
+                    src_text.split(), 
+                    src_vocab, 
+                    tgt_vocab, 
+                    model, 
+                    device,
+                    src_tokenizer=src_tokenizer,
+                    use_subword=use_subword
+                )
                 
                 # Detokenize for BLEU calculation
                 hypotheses.append(detokenize_text(pred_text))
@@ -127,17 +153,47 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
+    # Load model first to get preprocessing parameters
+    checkpoint = torch.load(args.model_path, map_location=device)
+    model_args = checkpoint['args']
+    
+    # Extract preprocessing parameters
+    use_subword = model_args.get('use_subword', False)
+    max_len = model_args.get('max_len', 50)
+    max_ratio = model_args.get('max_ratio', 2.0)
+    subword_vocab_size = model_args.get('subword_vocab_size', 8000)
+    
     # Load data
     print(f"Loading {args.direction} translation data...")
     _, _, test_loader, src_vocab, tgt_vocab = load_translation_data(
         direction=args.direction,
         batch_size=args.batch_size,
-        max_length=args.max_length
+        max_length=args.max_length,
+        use_subword=use_subword,
+        max_len=max_len,
+        max_ratio=max_ratio,
+        subword_vocab_size=subword_vocab_size
     )
     
-    # Load model
-    checkpoint = torch.load(args.model_path, map_location=device)
-    model_args = checkpoint['args']
+    # Load tokenizers if using subword tokenization
+    src_tokenizer = None
+    if use_subword:
+        import pickle
+        
+        # Determine source and target languages
+        if args.direction == 'en-vi':
+            src_lang, tgt_lang = 'English', 'Vietnamese'
+        else:
+            src_lang, tgt_lang = 'Vietnamese', 'English'
+            
+        # Load tokenizers
+        tokenizer_cache_file = f'cache/{src_lang}_{tgt_lang}_subword_tokenizer.pkl'
+        if os.path.exists(tokenizer_cache_file):
+            with open(tokenizer_cache_file, 'rb') as f:
+                src_tokenizer, _ = pickle.load(f)
+        else:
+            print("Warning: Could not find tokenizer cache file. Using word-level tokenization.")
+            use_subword = False
     
     # Create model with the same architecture
     model = create_model(
@@ -155,7 +211,15 @@ def main(args):
     print(f"Model loaded from {args.model_path}")
     
     # Calculate BLEU score
-    bleu_score, hypotheses, references = evaluate_bleu(model, test_loader, src_vocab, tgt_vocab, device)
+    bleu_score, hypotheses, references = evaluate_bleu(
+        model, 
+        test_loader, 
+        src_vocab, 
+        tgt_vocab, 
+        device,
+        src_tokenizer=src_tokenizer,
+        use_subword=use_subword
+    )
     print(f"BLEU score: {bleu_score:.2f}")
     
     # Calculate BERTScore
@@ -177,7 +241,15 @@ def main(args):
             src_text = batch['src_texts'][0]
             tgt_text = batch['tgt_texts'][0]
             
-            pred_text = translate_sentence(src_text.split(), src_vocab, tgt_vocab, model, device)
+            pred_text = translate_sentence(
+                src_text.split(), 
+                src_vocab, 
+                tgt_vocab, 
+                model, 
+                device,
+                src_tokenizer=src_tokenizer,
+                use_subword=use_subword
+            )
             
             print(f"Source: {src_text}")
             print(f"Target: {tgt_text}")
