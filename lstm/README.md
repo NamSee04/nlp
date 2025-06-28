@@ -19,6 +19,16 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Preprocessing
+```bash
+python preprocess.py \
+    --direction en-vi \
+    --max_len 50 \
+    --max_ratio 2.0 \
+    --use_subword \
+    --subword_vocab_size 8000
+```
+
 ### End-to-end Run
 ```bash
 bash run.sh
@@ -26,14 +36,24 @@ bash run.sh
 
 ### Training
 ```bash
-python train.py --direction en-vi  # English to Vietnamese
-python train.py --direction vi-en  # Vietnamese to English
+python train.py \
+    --direction en-vi \
+    --max_len 50 \
+    --max_ratio 2.0
+# With subword tokenization:
+python train.py \
+    --direction en-vi \
+    --use_subword \
+    --subword_vocab_size 8000
 ```
 
 ### Evaluation
 ```bash
-python evaluate.py --direction en-vi --model-path models/en-vi-lstm.pt
-python evaluate.py --direction vi-en --model-path models/vi-en-lstm.pt
+python evaluate.py \
+    --direction en-vi \
+    --max_len 50 \
+    --max_ratio 2.0 \
+    --model-path models/en-vi-lstm.pt
 ```
 
 ### Translation (Inference)

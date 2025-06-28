@@ -129,10 +129,13 @@ def main(args):
     
     # Load data
     print(f"Loading {args.direction} translation data...")
+    # Determine effective max length for filtering and truncation
+    effective_max_len = args.max_len if args.max_len is not None else args.max_length
     _, _, test_loader, src_vocab, tgt_vocab = load_translation_data(
         direction=args.direction,
         batch_size=args.batch_size,
-        max_length=args.max_length
+        max_length=effective_max_len,
+        max_ratio=args.max_ratio
     )
     
     # Load model
@@ -191,6 +194,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, required=True, help="Path to the saved model")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--max_length", type=int, default=100, help="Maximum sequence length")
+    parser.add_argument("--max_len", type=int, default=None, help="Maximum sequence length for filtering and truncation")
+    parser.add_argument("--max_ratio", type=float, default=None, help="Maximum length ratio for filtering")
     parser.add_argument("--examples", type=int, default=5, help="Number of translation examples to show")
     
     args = parser.parse_args()

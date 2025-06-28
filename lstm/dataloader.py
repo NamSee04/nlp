@@ -4,7 +4,7 @@ from datasets import load_dataset
 import pickle
 import os
 from tqdm import tqdm
-from utils import preprocess_text, build_vocabulary
+from utils import preprocess_text, build_vocabulary, filter_by_length, filter_by_ratio
 
 class TranslationDataset(Dataset):
     def __init__(self, data, src_vocab, tgt_vocab, src_lang, tgt_lang, max_length=100):
@@ -48,7 +48,7 @@ class TranslationDataset(Dataset):
             
         return indices
 
-def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, max_length=100):
+def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, max_length=100, max_ratio=None):
     """
     Load and prepare the vi_en-translation dataset
     
@@ -57,6 +57,7 @@ def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, ma
         vocab_min_freq: minimum frequency for words to be included in vocabulary
         batch_size: batch size for DataLoader
         max_length: maximum sequence length
+        max_ratio: maximum length ratio
         
     Returns:
         train_loader, val_loader, test_loader, src_vocab, tgt_vocab
@@ -87,6 +88,24 @@ def load_translation_data(direction='en-vi', vocab_min_freq=2, batch_size=32, ma
         train_data = dataset['train']
         val_data = dataset['validation']
         test_data = dataset['test']
+    
+    # Filter data based on length and ratio
+    print(f"Filtering data with max_length={max_length}, max_ratio={max_ratio}...")
+    def filter_dataset(dataset):
+        filtered = []
+        for item in dataset:
+            src = preprocess_text(item[src_lang], src_lang)
+            tgt = preprocess_text(item[tgt_lang], tgt_lang)
+            if max_length and not filter_by_length(src, tgt, max_length):
+                continue
+            if max_ratio and not filter_by_ratio(src, tgt, max_ratio):
+                continue
+            filtered.append(item)
+        return filtered
+
+    train_data = filter_dataset(train_data)
+    val_data = filter_dataset(val_data)
+    test_data = filter_dataset(test_data)
     
     # Build or load vocabularies
     if os.path.exists(vocab_cache_file):

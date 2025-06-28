@@ -3,9 +3,9 @@ from datasets import load_dataset
 from tqdm import tqdm
 import os
 import pickle
-from utils import preprocess_text, build_vocabulary
+from utils import preprocess_text, build_vocabulary, filter_by_length, filter_by_ratio
 
-def preprocess_dataset(direction='en-vi', min_freq=2, cache_dir='cache'):
+def preprocess_dataset(direction='en-vi', min_freq=2, cache_dir='cache', max_length=100, max_ratio=None):
     """
     Preprocess the dataset and build vocabularies
     
@@ -13,6 +13,8 @@ def preprocess_dataset(direction='en-vi', min_freq=2, cache_dir='cache'):
         direction: 'en-vi' for English to Vietnamese, 'vi-en' for Vietnamese to English
         min_freq: minimum frequency for words to be included in vocabulary
         cache_dir: directory to cache processed data
+        max_length: maximum sequence length for filtering
+        max_ratio: maximum length ratio for filtering
         
     Returns:
         train_data, val_data, test_data, src_vocab, tgt_vocab
@@ -56,12 +58,24 @@ def preprocess_dataset(direction='en-vi', min_freq=2, cache_dir='cache'):
         val_data = dataset['validation']
         test_data = dataset['test']
     
-    # Preprocess the data
-    print("Preprocessing text data...")
-    
-    # Extract source and target texts
-    src_texts = [preprocess_text(item[src_lang], src_lang) for item in tqdm(train_data, desc="Processing source texts")]
-    tgt_texts = [preprocess_text(item[tgt_lang], tgt_lang) for item in tqdm(train_data, desc="Processing target texts")]
+    # Preprocess and filter the data
+    print("Preprocessing and filtering text data...")
+    filtered_src_texts = []
+    filtered_tgt_texts = []
+    for item in tqdm(train_data, desc="Processing and filtering texts"):
+        src = preprocess_text(item[src_lang], src_lang)
+        tgt = preprocess_text(item[tgt_lang], tgt_lang)
+        # Filter by sequence length
+        if max_length and not filter_by_length(src, tgt, max_length):
+            continue
+        # Filter by length ratio
+        if max_ratio and not filter_by_ratio(src, tgt, max_ratio):
+            continue
+        filtered_src_texts.append(src)
+        filtered_tgt_texts.append(tgt)
+    print(f"Filtered training pairs: {len(filtered_src_texts)} out of {len(train_data)}")
+    src_texts = filtered_src_texts
+    tgt_texts = filtered_tgt_texts
     
     # Build vocabularies
     print("Building vocabularies...")
@@ -90,7 +104,17 @@ if __name__ == "__main__":
                         help="Minimum frequency for words to be included in vocabulary")
     parser.add_argument("--cache_dir", type=str, default="cache", 
                         help="Directory to cache processed data")
+    parser.add_argument("--max_len", type=int, default=None, help="Maximum sequence length for filtering")
+    parser.add_argument("--max_ratio", type=float, default=None, help="Maximum length ratio for filtering")
     
     args = parser.parse_args()
     
-    preprocess_dataset(args.direction, args.min_freq, args.cache_dir)
+    # Determine effective filtering parameters
+    eff_max_length = args.max_len if args.max_len is not None else 100
+    preprocess_dataset(
+        args.direction,
+        args.min_freq,
+        args.cache_dir,
+        max_length=eff_max_length,
+        max_ratio=args.max_ratio
+    )

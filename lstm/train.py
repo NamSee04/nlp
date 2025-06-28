@@ -100,11 +100,14 @@ def main(args):
     
     # Load data
     print(f"Loading {args.direction} translation data...")
+    # Determine effective max length for filtering and truncation
+    effective_max_len = args.max_len if args.max_len is not None else args.max_length
     train_loader, val_loader, test_loader, src_vocab, tgt_vocab = load_translation_data(
         direction=args.direction,
         vocab_min_freq=args.min_freq,
         batch_size=args.batch_size,
-        max_length=args.max_length
+        max_length=effective_max_len,
+        max_ratio=args.max_ratio
     )
     
     # Create model
@@ -192,6 +195,10 @@ if __name__ == "__main__":
                         help="Minimum frequency for words to be included in vocabulary")
     parser.add_argument("--max_length", type=int, default=100, help="Maximum sequence length")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
+    parser.add_argument("--max_len", type=int, default=None, help="Maximum sequence length for filtering and truncation")
+    parser.add_argument("--max_ratio", type=float, default=None, help="Maximum length ratio for filtering")
+    parser.add_argument("--use_subword", action="store_true", help="Use subword tokenization")
+    parser.add_argument("--subword_vocab_size", type=int, default=8000, help="Subword vocabulary size")
     
     args = parser.parse_args()
     main(args) 
