@@ -10,9 +10,16 @@ __pycache__/
 *.pth.tar.bz2
 *.pth.tar.xz
 *.pth.tar.lzma
+*.DS_Store
+cache/
+*.pt.tar.gz
+*.pt.tar.bz2
+*.pt.tar.xz
+*.pt.tar.lzma
 
 # C extensions
 *.so
+
 
 # Distribution / packaging
 .Python
